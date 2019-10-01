@@ -14,6 +14,7 @@ img_h = square_size*(4+5)
 
 image = Image.new('RGBA', (img_w, img_h), color='black')
 draw = ImageDraw.Draw(image)
+recorded = keyboard.record()
 
 #accesses underlying pixels
 def access_square_center(x, y):
@@ -29,7 +30,7 @@ def access_square(x, y):
     processedy = (y*2) - 1
     return access_square_center(processedx, processedy)
 
-recorded = keyboard.record()
+
 
 def overlay_circle(image, x, y, size, color = 'red'):
     overlay = Image.new('RGBA', (image.size))
@@ -44,7 +45,7 @@ def overlay_line(image, startx, starty, endx, endy, width, color='red'):
     return Image.alpha_composite(image, overlay)
 
 
-#TODO: fix range function, right now it produces a number outside the range and returns an indexerror when trying to access val 
+
 def duration_to_color(max_duration, min_duration, duration, color_range, transparency):
 
     # print(max_duration, min_duration, duration, color_range)
@@ -71,96 +72,107 @@ def duration_to_size(max_duration, min_duration, duration, size_range):
 
 
 # print(recorded)
+def convert_to_draw_instructions(recorded):
 
-cache = []
-# print(recorded)
-for currentEvent in recorded:
-    if currentEvent.name == 'esc':
-        break
+    cache = []
+    # print(recorded)
+    for currentEvent in recorded:
+        if currentEvent.name == 'esc':
+            break
 
-    # if the current letter doesn't exist in the cache, add it to the cache
-    if not any(event['name'] == currentEvent.name for event in cache):
-        cache.append({'name': currentEvent.name, 'num' : 1, 'start' : currentEvent.time, 'end':None})
-
-    # if it does exist in the cache
-    else:
-        relevantEvents = [event for event in cache if event['name'] is currentEvent.name]
-        try:
-            if relevantEvents[len(relevantEvents) - 1]['num'] is 2:
-                #if the last one was a complete press, add new event to cache
-                cache.append({'name': currentEvent.name, 'num' : 1, 'start' : currentEvent.time, 'end':None})
-            else:
-                #if the existing one has not been released yet, complete it with the release time
-                relevantEvents[len(relevantEvents) - 1].update({'num' : 2, 'end': currentEvent.time})
-        except IndexError:
-            print('indexerror')
+        # if the current letter doesn't exist in the cache, add it to the cache
+        if not any(event['name'] == currentEvent.name for event in cache):
             cache.append({'name': currentEvent.name, 'num' : 1, 'start' : currentEvent.time, 'end':None})
 
-cacheWithLines = []
+        # if it does exist in the cache
+        else:
+            relevantEvents = [event for event in cache if event['name'] is currentEvent.name]
+            try:
+                if relevantEvents[len(relevantEvents) - 1]['num'] is 2:
+                    #if the last one was a complete press, add new event to cache
+                    cache.append({'name': currentEvent.name, 'num' : 1, 'start' : currentEvent.time, 'end':None})
+                else:
+                    #if the existing one has not been released yet, complete it with the release time
+                    relevantEvents[len(relevantEvents) - 1].update({'num' : 2, 'end': currentEvent.time})
+            except IndexError:
+                print('indexerror for: ' + currentEvent.name)
+                cache.append({'name': currentEvent.name, 'num' : 1, 'start' : currentEvent.time, 'end':None})
 
-lastKeyPress = None
-for idx, keyPress in enumerate(cache):
-    if lastKeyPress:
-        # print(lastKeyPress, keyPress)
-        down_down_time = keyPress['start'] - lastKeyPress['start']
-        cacheWithLines.append(lastKeyPress)
-        cacheWithLines.append({'name': 'line', 'time': down_down_time})
-        cacheWithLines.append(keyPress)
-    lastKeyPress = keyPress
+    cacheWithLines = []
 
-# print(cacheWithLines)
+    lastKeyPress = None
+    for idx, keyPress in enumerate(cache):
+        if lastKeyPress:
+            # print(lastKeyPress, keyPress)
+            down_down_time = keyPress['start'] - lastKeyPress['start']
+            cacheWithLines.append(lastKeyPress)
+            cacheWithLines.append({'name': 'line', 'time': down_down_time})
+            cacheWithLines.append(keyPress)
+        lastKeyPress = keyPress
 
-line_timings = [x['time'] for x in cacheWithLines if x['name'] == 'line']
+    # print(cacheWithLines)
 
-circle_timings = [x['end'] - x['start'] for x in cacheWithLines if x['name'] != 'line' and x['end'] != None]
+    line_timings = [x['time'] for x in cacheWithLines if x['name'] == 'line']
 
-
-
-max_duration_lines = max(line_timings)
-min_duration_lines = min(line_timings)
-
-max_duration_circles = max(circle_timings)
-min_duration_circles = min(circle_timings)
-
-shapes = []
+    circle_timings = [x['end'] - x['start'] for x in cacheWithLines if x['name'] != 'line' and x['end'] != None]
 
 
 
+    max_duration_lines = max(line_timings)
+    min_duration_lines = min(line_timings)
+
+    max_duration_circles = max(circle_timings)
+    min_duration_circles = min(circle_timings)
+
+    return cacheWithLines, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles
 
 
 
-for idx, event in enumerate(cacheWithLines):
-    if event['name'] == 'line':
-        try:
-            startx, starty = access_square(coordinates[cacheWithLines[idx - 1]['name']][0], coordinates[cacheWithLines[idx - 1]['name']][1])
 
-            endx, endy = access_square(coordinates[cacheWithLines[idx + 1]['name']][0], coordinates[cacheWithLines[idx + 1]['name']][1])
+def draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles):
 
-            # print(startx, starty, endx, endy)
-            # image = draw.line((startx, starty, endx, endy), fill='red', width=1)
-            color = duration_to_color(max_duration_lines, min_duration_lines, event['time'], color_range=50, transparency=50)
-            # print(color)
-            size = duration_to_size(max_duration_lines, min_duration_lines, event['time'], 20)
-            image = overlay_line(image, startx, starty, endx, endy, size, color=color)
-        except KeyError:
-            continue
-    else:
-        try:
-            imgx, imgy = access_square(coordinates[event['name']][0], coordinates[event['name']][1])
-        
-            # print(imgx, imgy)
-            # draw.ellipse([imgx, imgy, imgx+10, imgy+10], fill=(255,0,0,128))
-            if event['end'] != None:
-                color = duration_to_color(max_duration_circles, min_duration_circles, event['end']- event['start'], color_range=50, transparency=50)
-                # print(color)
-                size = duration_to_size(max_duration_circles, min_duration_circles, event['end']- event['start'], 50)
-                print(size)
-                image = overlay_circle(image, imgx, imgy, size, color=color)
-        except KeyError:
-            continue
+    for idx, event in enumerate(instructions):
+        if event['name'] == 'line':
+            try:
+                start_x = coordinates[instructions[idx - 1]['name']][0]
+                start_y = coordinates[instructions[idx - 1]['name']][1]
+                end_x   = coordinates[instructions[idx + 1]['name']][0]
+                end_y   = coordinates[instructions[idx + 1]['name']][1]
 
-image.save('img.png')
+
+                grid_start_x, grid_start_y = access_square(start_x, start_y)
+                grid_end_x, grid_end_y = access_square(end_x, end_y)
+
+
+                color = duration_to_color(max_duration_lines, min_duration_lines, event['time'], color_range=50, transparency=50)
+                size = duration_to_size(max_duration_lines, min_duration_lines, event['time'], 20)
+                image = overlay_line(image, grid_start_x, grid_start_y, grid_end_x, grid_end_y, size, color=color)
+
+            except KeyError:
+                continue
+        else:
+            try:
+                x = coordinates[event['name']][0]
+                y = coordinates[event['name']][1]
+                grid_x, grid_y = access_square(x, y)
+            
+
+                if event['end'] != None:
+                    color = duration_to_color(max_duration_circles, min_duration_circles, event['end']- event['start'], color_range=50, transparency=50)
+                    size = duration_to_size(max_duration_circles, min_duration_circles, event['end']- event['start'], 50)
+                    image = overlay_circle(image, grid_x, grid_y, size, color=color)
+
+            except KeyError:
+                continue
+
+    image.save('img.png')
     
+instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles = convert_to_draw_instructions(recorded)
+
+draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles)
+
+
+
 keyboard.wait()   
 
 
@@ -176,7 +188,15 @@ the quick brown fox jumped over the lazy dog
 
 It's raining very heavily!
 
+'''
 
 
+'''
+TODO:Need to figure out how to get test data in a convenient manner.
 
+Maybe keep program running in background and continously record snippet of text. 
+- Will need to stop recording if the user pauses typing- v. long gaps will skew data. 
+- Maybe a 1 second pause means terminate process.
+
+TODO:Need to figure out why some events stay at None. It happens for spaces, shift and delete. Maybe press time is too fast?
 '''
