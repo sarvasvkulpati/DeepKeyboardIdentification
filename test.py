@@ -74,11 +74,11 @@ def convert_to_draw_instructions(recorded):
         # if the current letter doesn't exist in the cache, add it to the cache
         if not any(event['name'] == currentEvent.name for event in cache):
             cache.append({'name': currentEvent.name, 'num' : 1, 'start' : currentEvent.time, 'end':None})
-            print("adding " + currentEvent.name + " to the cache")
+            # print("adding " + currentEvent.name + " to the cache")
         # if it does exist in the cache
         else:
             relevantEvents = [event for event in cache if event['name'] == currentEvent.name]
-            print("relevantEvents for " + currentEvent.name + " are " + str(relevantEvents))
+            # print("relevantEvents for " + currentEvent.name + " are " + str(relevantEvents))
             try:
                 if relevantEvents[len(relevantEvents) - 1]['num'] is 2:
                     #if the last one was a complete press, add new event to cache
@@ -120,7 +120,7 @@ def convert_to_draw_instructions(recorded):
 
     return cacheWithLines, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles
 
-def draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles):
+def draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles, img_name="img.png"):
 
     for idx, event in enumerate(instructions):
         if event['name'] == 'line':
@@ -136,7 +136,7 @@ def draw_from_instructions(image, instructions, min_duration_lines, max_duration
 
 
                 color = duration_to_color(max_duration_lines, min_duration_lines, event['time'], color_range=50, transparency=50)
-                size = duration_to_size(max_duration_lines, min_duration_lines, event['time'], 20)
+                size = duration_to_size(max_duration_lines, min_duration_lines, event['time'], 40)
                 image = overlay_line(image, grid_start_x, grid_start_y, grid_end_x, grid_end_y, size, color=color)
 
             except KeyError:
@@ -156,12 +156,39 @@ def draw_from_instructions(image, instructions, min_duration_lines, max_duration
             except KeyError:
                 continue
 
-    image.save('img.png')
+    image.save(img_name)
     
-instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles = convert_to_draw_instructions(recorded)
-draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles)
+def create_recording_batches(recording, escape_time = 1):
+    recording_batches = []
+    cache = []
+    for idx, event in enumerate(recorded):
+        prev_event = recorded[idx-1]
+        time_interval = event.time - prev_event.time
+        
+        if event.name == 'esc':
+            recording_batches.append(cache)
+
+        elif time_interval < escape_time:
+            cache.append(event)
+
+        elif time_interval > escape_time:
+            recording_batches.append(cache)
+            cache = []
+            cache.append(event)
+
+    return recording_batches
+
+# instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles = convert_to_draw_instructions(recorded)
+# draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles)
+
+recording_batches = create_recording_batches(recorded)
+print(recording_batches)
+for idx, recording in enumerate(recording_batches):
+    instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles = convert_to_draw_instructions(recording)
+    draw_from_instructions(image, instructions, min_duration_lines, max_duration_lines, min_duration_circles, max_duration_circles, str(idx) + ".png")
 
 keyboard.wait()   
+
 
 
 
@@ -183,8 +210,8 @@ It's raining very heavily!
 TODO:Need to figure out how to get test data in a convenient manner.
 
 Maybe keep program running in background and continously record snippet of text. 
-- Will need to stop recording if the user pauses typing- v. long gaps will skew data. 
-- Maybe a 1 second pause means terminate process.
-
+- Will need to stop recording if the user pauses typing. V long gaps will skew data. Maybe a 1 second pause means terminate process.
+- start recording again on user keypress
+- if it's less than 10 presses, then discard? Need to experiment
 
 '''
